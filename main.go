@@ -14,7 +14,6 @@ import (
 )
 
 var (
-	serveDir  = flag.String("serveDir", "target", "directory of files to serve")
 	port      = flag.Int("port", 8080, "port on which to serve")
 	srcDir    = flag.String("srcDir", "pages", "source directory to build")
 	dstDir    = flag.String("dstDir", "target", "build output directory")
@@ -44,13 +43,13 @@ func main() {
 	}
 
 	if *serveSite {
-		log.Println("serving static files from:", *serveDir)
+		log.Println("serving static files from:", *dstDir)
 		log.Printf("serving at http://localhost:%d\n", *port)
 		http.HandleFunc("/healthz", func(resp http.ResponseWriter, req *http.Request) {
 			resp.WriteHeader(200)
 		})
 		// TODO: expose in-memory cache at /cachez
-		http.Handle("/", serve.NewHandler(http.Dir(*serveDir)))
+		http.Handle("/", serve.NewHandler(http.Dir(*dstDir)))
 		if err := http.ListenAndServe(fmt.Sprintf(":%d", *port), nil); err != nil {
 			log.Println("fatal:", err)
 		}
