@@ -49,7 +49,6 @@ To see additional options you can print the usage message with `sss -h`.
 
     go build        # build
     go test ./...   # run unit tests
-    ./test.sh       # run integration tests
 
 ## Implementation
 

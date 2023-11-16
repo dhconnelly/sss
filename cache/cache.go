@@ -2,6 +2,7 @@ package cache
 
 import (
 	"container/heap"
+	"sync"
 )
 
 type elem struct {
@@ -57,22 +58,16 @@ func (data CachedData) Len() int {
 }
 
 type Cache struct {
+	mux     sync.Mutex
 	data    map[string]CachedData
 	lfu     *frequencyHeap
 	size    int
 	maxSize int
 }
 
-func (c *Cache) Size() int {
-	return c.size
-}
-
-func (c *Cache) Len() int {
-	return len(c.data)
-}
-
 func New(size int) *Cache {
 	return &Cache{
+		mux:     sync.Mutex{},
 		data:    make(map[string]CachedData),
 		lfu:     &frequencyHeap{},
 		size:    0,
@@ -80,7 +75,36 @@ func New(size int) *Cache {
 	}
 }
 
+func (c *Cache) pop() {
+	// UNSYNCHRONIZED
+	last := heap.Pop(c.lfu).(elem)
+	delete(c.data, last.path)
+	c.size -= last.size
+}
+
+func (c *Cache) push(path string, data CachedData) {
+	// UNSYNCHRONIZED
+	last := elem{path: path, size: data.Len(), count: 0}
+	heap.Push(c.lfu, last)
+	c.data[path] = data
+	c.size += last.size
+}
+
+func (c *Cache) Size() int {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	return c.size
+}
+
+func (c *Cache) Len() int {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	return len(c.data)
+}
+
 func (c *Cache) Get(path string) (CachedData, bool) {
+	c.mux.Lock()
+	defer c.mux.Unlock()
 	data, ok := c.data[path]
 	if !ok {
 		return CachedData{}, false
@@ -89,20 +113,9 @@ func (c *Cache) Get(path string) (CachedData, bool) {
 	return data, true
 }
 
-func (c *Cache) pop() {
-	last := heap.Pop(c.lfu).(elem)
-	delete(c.data, last.path)
-	c.size -= last.size
-}
-
-func (c *Cache) push(path string, data CachedData) {
-	last := elem{path: path, size: data.Len(), count: 0}
-	heap.Push(c.lfu, last)
-	c.data[path] = data
-	c.size += last.size
-}
-
 func (c *Cache) Put(path string, data CachedData) {
+	c.mux.Lock()
+	defer c.mux.Unlock()
 	if len(data.Data) > c.maxSize {
 		return
 	}
