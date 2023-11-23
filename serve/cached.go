@@ -37,6 +37,7 @@ type cachedResponseWriter struct {
 	http.ResponseWriter
 	header http.Header
 	buf    *bytes.Buffer
+	status int
 }
 
 func (w cachedResponseWriter) Write(b []byte) (int, error) {
@@ -53,19 +54,25 @@ func (w cachedResponseWriter) WriteHeader(status int) {
 }
 
 func (h *cachedHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
+	// try to fetch it from the cache
 	if data, ok := h.cache.Get(req.URL.Path); ok {
 		cacheHits.Add(req.URL.Path, 1)
 		h.serveCached(resp, req, data)
 		return
 	}
 
+	// otherwise delegate to the underlying handler
 	w := cachedResponseWriter{req: req, ResponseWriter: resp, buf: &bytes.Buffer{}}
 	h.h.ServeHTTP(w, req)
-	data := cache.CachedData{
-		Data:        w.buf.Bytes(),
-		ContentType: w.Header().Get("Content-Type"),
+
+	// cache the response, but only if we actually read some data
+	if len(w.buf.Bytes()) > 0 {
+		data := cache.CachedData{
+			Data:        w.buf.Bytes(),
+			ContentType: w.Header().Get("Content-Type"),
+		}
+		h.cache.Put(req.URL.Path, data)
 	}
-	h.cache.Put(req.URL.Path, data)
 }
 
 func newCachedHandler(h http.Handler) http.Handler {

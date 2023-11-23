@@ -2,7 +2,15 @@ package cache
 
 import (
 	"container/heap"
+	"expvar"
+	"log"
 	"sync"
+)
+
+var (
+	cacheCount   = expvar.NewInt("cacheSizeItems")
+	cacheSizeCur = expvar.NewInt("cacheSizeBytesCur")
+	cacheSizeMax = expvar.NewInt("cacheSizeBytesMax")
 )
 
 type elem struct {
@@ -66,6 +74,7 @@ type Cache struct {
 }
 
 func New(size int) *Cache {
+	cacheSizeMax.Set(int64(size))
 	return &Cache{
 		mux:     sync.Mutex{},
 		data:    make(map[string]CachedData),
@@ -80,6 +89,9 @@ func (c *Cache) pop() {
 	last := heap.Pop(c.lfu).(elem)
 	delete(c.data, last.path)
 	c.size -= last.size
+	log.Printf("cache: evicted %v, new count %d", last, len(c.data))
+	cacheCount.Set(int64(len(c.data)))
+	cacheSizeCur.Set(int64(c.size))
 }
 
 func (c *Cache) push(path string, data CachedData) {
@@ -88,6 +100,9 @@ func (c *Cache) push(path string, data CachedData) {
 	heap.Push(c.lfu, last)
 	c.data[path] = data
 	c.size += last.size
+	log.Printf("cache: added %v, new count %d", last, len(c.data))
+	cacheCount.Set(int64(len(c.data)))
+	cacheSizeCur.Set(int64(c.size))
 }
 
 func (c *Cache) Size() int {
